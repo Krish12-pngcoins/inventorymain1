@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KSNumismatics ERP | Fishbowl Style</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+    <style>
+        :root {
+            --fb-blue: #005696;
+            --fb-light: #eef5fb;
+            --fb-border: #ced4da;
+            --fb-sidebar: #2c3e50;
+            --white: #ffffff;
+            --text: #333;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f9; color: var(--text); font-size: 13px; height: 100vh; overflow: hidden; }
+
+        /* LAYOUT */
+        #wrapper { display: flex; height: 100vh; }
+        #sidebar { width: 220px; background: var(--fb-sidebar); color: white; display: flex; flex-direction: column; }
+        #content { flex: 1; display: flex; flex-direction: column; background: white; }
+
+        /* SIDEBAR NAV */
+        .brand { padding: 20px; font-weight: bold; font-size: 16px; background: #1a252f; border-bottom: 1px solid #3e4f5f; }
+        .nav-item { padding: 12px 20px; cursor: pointer; color: #bdc3c7; border-bottom: 1px solid #3e4f5f; display: flex; align-items: center; gap: 10px; }
+        .nav-item:hover, .nav-item.active { background: var(--fb-blue); color: white; }
+
+        /* RIBBON & HEADER */
+        .ribbon { height: 50px; border-bottom: 1px solid var(--fb-border); display: flex; align-items: center; padding: 0 15px; gap: 10px; background: #fff; }
+        .page-header { background: var(--fb-light); padding: 10px 20px; border-bottom: 1px solid var(--fb-border); }
+        .page-header h2 { font-size: 18px; color: var(--fb-blue); }
+
+        /* TABLES */
+        .view-container { flex: 1; padding: 15px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th { text-align: left; padding: 8px; font-size: 11px; text-transform: uppercase; color: #666; border-bottom: 2px solid var(--fb-border); background: #f8f9fa; }
+        td { padding: 8px; border-bottom: 1px solid #eee; }
+        tr:hover { background: var(--fb-light); }
+
+        /* BUTTONS */
+        .btn { padding: 6px 12px; border: 1px solid var(--fb-border); background: white; cursor: pointer; border-radius: 3px; font-weight: 600; font-size: 12px; }
+        .btn-p { background: var(--fb-blue); color: white; border-color: var(--fb-blue); }
+
+        /* INVOICE DESIGN */
+        .invoice-sheet { max-width: 800px; margin: 20px auto; padding: 40px; border: 1px solid #ddd; background: white; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .inv-top { display: flex; justify-content: space-between; border-bottom: 2px solid var(--fb-blue); padding-bottom: 20px; margin-bottom: 20px; }
+
+        /* MODAL */
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; }
+        .modal-body { background: white; padding: 25px; border-radius: 4px; width: 500px; }
+
+        @media print {
+            #sidebar, .ribbon, .no-print, .btn { display: none !important; }
+            #content { height: auto; }
+            .invoice-sheet { border: none; box-shadow: none; width: 100%; margin: 0; padding: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="wrapper">
+    <nav id="sidebar">
+        <div class="brand">KSNumismatics LLC</div>
+        <div class="nav-item active" onclick="showTab('inventory')">📦 Inventory</div>
+        <div class="nav-item" onclick="showTab('sold')">✅ Sales History</div>
+        <div class="nav-item" onclick="showTab('customers')">👥 Customers</div>
+        <div class="nav-item" onclick="showTab('invoice')">🧾 Invoice Maker</div>
+    </nav>
+
+    <div id="content">
+        <div class="ribbon">
+            <button class="btn btn-p" onclick="openModal()">+ Add New Coin</button>
+            <button class="btn" onclick="window.print()">🖨 Print View</button>
+        </div>
+
+        <div class="page-header">
+            <h2 id="view-title">Inventory Management</h2>
+        </div>
+
+        <div class="view-container">
+            <div id="tab-inventory" class="tab-pane">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Barcode</th><th>Item Name</th><th>Year</th><th>Cost</th><th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-list"></tbody>
+                </table>
+            </div>
+
+            <div id="tab-sold" class="tab-pane" style="display:none">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item Name</th><th>Cost</th><th>Sold Price</th><th>Profit</th><th>Buyer</th><th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sold-list"></tbody>
+                </table>
+            </div>
+
+            <div id="tab-invoice" class="tab-pane" style="display:none">
+                <div class="no-print" style="margin-bottom:20px;">
+                    <label>Select Sold Item for Invoice:</label>
+                    <select id="invoice-selector" onchange="generateInvoice()" style="padding:5px; width:300px;"></select>
+                </div>
+                <div class="invoice-sheet" id="invoice-area">
+                    <div class="inv-top">
+                        <div>
+                            <h1 style="color:var(--fb-blue)">INVOICE</h1>
+                            <p><strong>KSNumismatics LLC</strong></p>
+                            <p>Canton, Michigan</p>
+                        </div>
+                        <div style="text-align:right">
+                            <p>Date: <span id="inv-date"></span></p>
+                            <p>Inv #: <span id="inv-num"></span></p>
+                        </div>
+                    </div>
+                    <table style="margin-top:20px">
+                        <thead style="background:var(--fb-blue); color:white">
+                            <tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr>
+                        </thead>
+                        <tbody id="inv-items"></tbody>
+                    </table>
+                    <div style="text-align:right; margin-top:30px">
+                        <h2 style="color:var(--fb-blue)">Grand Total: <span id="inv-total">$0.00</span></h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="addModal">
+    <div class="modal-body">
+        <h3>Add New Coin</h3>
+        <div style="margin-top:15px">
+            <label>Name:</label><input type="text" id="n-name" style="width:100%; margin-bottom:10px;">
+            <label>Year:</label><input type="text" id="n-year" style="width:100%; margin-bottom:10px;">
+            <label>Cost Paid ($):</label><input type="number" id="n-cost" style="width:100%; margin-bottom:15px;">
+            <button class="btn btn-p" onclick="saveCoin()">Add Item</button>
+            <button class="btn" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let db = JSON.parse(localStorage.getItem('ksn_db')) || { inventory: [], sold: [] };
+
+    function saveCoin() {
+        const id = 'KSN' + Math.floor(100000 + Math.random() * 900000);
+        const item = {
+            id,
+            name: document.getElementById('n-name').value,
+            year: document.getElementById('n-year').value,
+            cost: parseFloat(document.getElementById('n-cost').value) || 0
+        };
+        db.inventory.push(item);
+        sync();
+        closeModal();
+        renderAll();
+    }
+
+    function sellItem(id) {
+        const price = prompt("Sold Price:");
+        const buyer = prompt("Buyer Name:");
+        if(!price) return;
+
+        const idx = db.inventory.findIndex(c => c.id === id);
+        const item = db.inventory.splice(idx, 1)[0];
+        item.soldPrice = parseFloat(price);
+        item.buyer = buyer || "Retail Customer";
+        item.profit = item.soldPrice - item.cost;
+        item.date = new Date().toLocaleDateString();
+        
+        db.sold.push(item);
+        sync();
+        renderAll();
+        alert("Moved to Sales History and Invoice Maker.");
+    }
+
+    function renderAll() {
+        // Inventory
+        const invBody = document.getElementById('inventory-list');
+        invBody.innerHTML = db.inventory.map(c => `
+            <tr>
+                <td><svg id="bc-${c.id}" style="height:30px"></svg></td>
+                <td>${c.name}</td><td>${c.year}</td><td>$${c.cost}</td>
+                <td><button class="btn" onclick="sellItem('${c.id}')">Mark Sold</button></td>
+            </tr>
+        `).join('');
+        db.inventory.forEach(c => JsBarcode(`#bc-${c.id}`, c.id, {height: 25, fontSize: 10}));
+
+        // Sold History
+        document.getElementById('sold-list').innerHTML = db.sold.map(s => `
+            <tr>
+                <td>${s.name}</td><td>$${s.cost}</td><td>$${s.soldPrice}</td>
+                <td style="color:green">+$${s.profit}</td><td>${s.buyer}</td><td>${s.date}</td>
+            </tr>
+        `).join('');
+
+        // Invoice Selector
+        document.getElementById('invoice-selector').innerHTML = '<option>Select a sale...</option>' + 
+            db.sold.map((s, i) => `<option value="${i}">${s.name} - ${s.buyer}</option>`).join('');
+    }
+
+    function generateInvoice() {
+        const idx = document.getElementById('invoice-selector').value;
+        if(idx === 'Select a sale...') return;
+        const item = db.sold[idx];
+
+        document.getElementById('inv-date').innerText = item.date;
+        document.getElementById('inv-num').innerText = 'INV-' + Math.floor(Math.random()*1000);
+        document.getElementById('inv-items').innerHTML = `
+            <tr>
+                <td>${item.name} (${item.year})</td>
+                <td>1</td>
+                <td>$${item.soldPrice.toLocaleString()}</td>
+                <td>$${item.soldPrice.toLocaleString()}</td>
+            </tr>
+        `;
+        document.getElementById('inv-total').innerText = '$' + item.soldPrice.toLocaleString();
+    }
+
+    function showTab(name) {
+        document.querySelectorAll('.tab-pane').forEach(p => p.style.display = 'none');
+        document.getElementById('tab-' + name).style.display = 'block';
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        document.getElementById('view-title').innerText = event.currentTarget.innerText;
+    }
+
+    function sync() { localStorage.setItem('ksn_db', JSON.stringify(db)); }
+    function openModal() { document.getElementById('addModal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('addModal').style.display = 'none'; }
+
+    renderAll();
+</script>
+</body>
+</html>
